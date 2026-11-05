@@ -1,0 +1,121 @@
+# Unallocated slugs, in order, for later extension stages:
+# vb8 bx7 gw0 vq5 gn7 rv6 ut0 ko9 du4 ok5 ag0
+
+slug: "inference-engine"
+name: "Build your own Inference Engine"
+short_name: "Inference Engine"
+release_status: "alpha"
+
+description_md: |-
+  Why does "The capital of France is" always continue with the same words? GPT-2 scores every word and keeps the highest, then repeats. An inference engine reads GPT-2's tables of numbers and writes the ids of those words. In this challenge, you'll build one, load GPT-2's real weights into it, and get the same ids GPT-2 writes.
+
+  Along the way, you'll learn about attention, the transformer, and more.
+
+short_description_md: |-
+  Learn about attention, the transformer, and more
+
+completion_percentage: 5
+
+languages:
+  - slug: "python"
+    release_status: "alpha"
+  - slug: "rust"
+    release_status: "alpha"
+  - slug: "go"
+    release_status: "alpha"
+
+marketing:
+  difficulty: hard
+  sample_extension_idea_title: "Use your tokenizer"
+  sample_extension_idea_description: "An inference engine that can turn a prompt into text."
+  frequently_asked_questions:
+    - question_markdown: "What exactly will I build?"
+      answer_markdown: |-
+        You'll build a program that loads GPT-2's weights and writes the next token IDs. It reads a safetensors file, runs the transformer, and can take the highest-scoring token, sample with temperature and top-p, or reuse past keys and values.
+
+        In the last stage, your program loads GPT-2's real 548 MB weight file and continues "The capital of France is" with the same six tokens GPT-2 writes: " the capital of the French Republic".
+
+        Planned extensions:
+        * Text in and text out, using your tokenizer
+        * Printing each token as it is generated
+        * Several prompts in one pass
+        * Your own matrix multiplication, softmax, GELU, and layer norm
+        * 8-bit weights
+
+        At the end, you'll have a GitHub repo to show off.
+    - question_markdown: "What exactly will I learn?"
+      answer_markdown: |-
+        In the first 9 stages, you'll learn:
+        * How a safetensors file stores tensor names, shapes, and raw weights
+        * How token embeddings and position embeddings add together
+        * How causal self-attention mixes earlier tokens into the current one
+        * How a transformer block combines attention, a feed-forward layer, and residual connections
+        * How the last position becomes a score for every token
+        * How greedy decoding repeats that computation
+        * How temperature and top-p choose a token from random numbers you are given
+        * How a key-value cache skips recomputing the prompt
+        * How to load and run GPT-2's real weights
+
+        As your code gets complex, you'll be forced to structure and refactor it, to avoid regressions and to make adding new features easier.
+    - question_markdown: "Why should I build such a project?"
+      answer_markdown: |-
+        GPT-2 finishes a prompt the same way every time you take the highest-scoring token. Those tokens come from multiplying the numbers in its weight file. You'll do that multiplication yourself, with no machine-learning framework, and the tokens will match GPT-2.
+
+        The same program then samples when you hand it random numbers, and reuses past keys and values so the continuation matches a full recompute. This is the other piece you need to run the model yourself.
+    - question_markdown: "What are the prerequisites for this challenge?"
+      answer_markdown: |-
+        You should be comfortable writing code in Python, Rust, or Go, and using Git. No machine learning background is required.
+
+        The stages teach the forward pass from the start, so a vague idea of vectors is enough. Most learners pick up the layer shapes as they go.
+
+        What matters most is curiosity and persistence. You'll develop intuition by exploring, debugging, and discovering solutions yourself.
+
+        While we will make it extremely simple to get started, don't expect this to be a follow-along tutorial.
+  testimonials: []
+
+stages:
+  - slug: "zf8"
+    name: "Read safetensors"
+    difficulty: very_easy
+    marketing_md: |-
+      In this stage, you'll implement the `inspect` command to read a safetensors file's tensor names, shapes, and values.
+  - slug: "pq6"
+    name: "Embed tokens"
+    difficulty: easy
+    marketing_md: |-
+      In this stage, you'll implement the `embed` command to add token embeddings and position embeddings.
+  - slug: "mo0"
+    name: "Causal attention"
+    difficulty: medium
+    marketing_md: |-
+      In this stage, you'll implement the `attn` command to mix each token's row with the rows of the tokens before it.
+  - slug: "hu4"
+    name: "Transformer block"
+    difficulty: medium
+    marketing_md: |-
+      In this stage, you'll implement the `block` command to run one transformer block.
+  - slug: "wi3"
+    name: "Logits"
+    difficulty: medium
+    marketing_md: |-
+      In this stage, you'll implement the `logits` command to run every layer and print the logits for the last position.
+  - slug: "hh8"
+    name: "Greedy decode"
+    difficulty: medium
+    marketing_md: |-
+      In this stage, you'll implement the `generate` command to repeatedly take the highest-scoring token.
+  - slug: "df2"
+    name: "Sample a token"
+    difficulty: medium
+    marketing_md: |-
+      In this stage, you'll add temperature and top-p sampling to `generate`, using one random number from stdin per token.
+  - slug: "rq5"
+    name: "KV cache"
+    difficulty: hard
+    marketing_md: |-
+      In this stage, you'll reuse past keys and values in `generate` instead of recomputing the whole sequence.
+  - slug: "zr7"
+    name: "Run GPT-2"
+    difficulty: medium
+    marketing_md: |-
+      In this stage, you'll run your `generate` command on GPT-2's real weights.
