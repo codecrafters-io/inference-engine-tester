@@ -8,8 +8,21 @@ This is a program that validates your progress on the Inference Engine challenge
   - `CODECRAFTERS_REPOSITORY_DIR` - root of the user's code submission
   - `CODECRAFTERS_TEST_CASES_JSON` - test cases in JSON format
   - `CODECRAFTERS_GPT2_WEIGHTS_PATH` - optional, the path of GPT-2's
-    `model.safetensors`, used by the "Run GPT-2" stage. Without it, the tester
-    downloads the file once into the user cache directory and checks its SHA-256.
+    `model.safetensors` for the "Run GPT-2" stage, for developing the tester.
+
+# GPT-2's weights in the test environment
+
+Only the "Run GPT-2" stage (`zr7`) needs GPT-2's 548 MB weights. When it starts,
+the tester looks for them at `$TMPDIR/codecrafters-gpt2/model.safetensors` on
+the container's disk. If they're missing, it downloads them from
+`gpt2WeightsURL` in `internal/gpt2_weights.go`, streaming to disk rather than
+memory, and keeps the file only if its size and SHA-256 match. A later run in
+the same pod reuses the file, and a new pod downloads it again. The download
+times out after 3 minutes, well inside the pod's 10-minute limit.
+
+The learner's program runs in the same pod, so it shares the pod's 2560Mi
+memory limit. Stage 9's description tells learners about the limit, and the
+tester adds a memory hint when the program dies without printing anything.
 
 # User code requirements
 

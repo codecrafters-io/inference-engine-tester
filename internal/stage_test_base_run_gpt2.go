@@ -66,7 +66,9 @@ func testRunGPT2(harness *test_case_harness.TestCaseHarness) error {
 	}
 	harness.Logger.Infof("Your program took %.1fs", time.Since(start).Seconds())
 	if result.ExitCode != 0 && len(result.Stdout) == 0 {
-		return fmt.Errorf("gpt2: your program exited with code %d and printed nothing to stdout", result.ExitCode)
+		return withHint("gpt2",
+			fmt.Sprintf("your program exited with code %d and printed nothing to stdout", result.ExitCode),
+			"The test server gives your program about 2.5 GB of memory, and a program that uses more is stopped, often with exit code 137. Keep each weight as a 4-byte float read from the file, not as a separate object.")
 	}
 	got, err := parseJSON[[]int](result.Stdout)
 	if err != nil {
