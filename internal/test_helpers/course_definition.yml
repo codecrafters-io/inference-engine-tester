@@ -7,7 +7,7 @@ short_name: "Inference Engine"
 release_status: "alpha"
 
 description_md: |-
-  Why does "The capital of France is" always continue with the same words? GPT-2 scores every word and keeps the highest, then repeats. An inference engine reads GPT-2's tables of numbers and writes the ids of those words. In this challenge, you'll build one, load GPT-2's real weights into it, and get the same ids GPT-2 writes.
+  Why does "The capital of France is" always continue with the same words? GPT-2 gives every possible next word a score, picks the word with the highest score, and repeats. An inference engine reads GPT-2's tables of numbers and writes the ids of those words. In this challenge, you'll build one, load GPT-2's real weights into it, and get the same ids GPT-2 writes.
 
   Along the way, you'll learn about attention, the transformer, and more.
 
