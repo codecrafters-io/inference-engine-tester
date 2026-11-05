@@ -58,7 +58,7 @@ func testRunGPT2(harness *test_case_harness.TestCaseHarness) error {
 	harness.Logger.Infof("$ ./your_program.sh %s", joinArgs(args))
 	executable := harness.NewExecutable()
 	executable.WorkingDir = workDir
-	executable.TimeoutInMilliseconds = int((180 * time.Second) / time.Millisecond)
+	executable.TimeoutInMilliseconds = int((300 * time.Second) / time.Millisecond)
 	start := time.Now()
 	result, err := executable.Run(args...)
 	if err != nil {

@@ -38,7 +38,7 @@ func gpt2WeightsPath(harness *test_case_harness.TestCaseHarness) (string, error)
 	if info, err := os.Stat(path); err == nil && info.Size() == gpt2WeightsSize {
 		return path, nil
 	}
-	harness.Logger.Infof("Downloading GPT-2's weights (548 MB). This happens once.")
+	harness.Logger.Infof("Downloading GPT-2's weights (548 MB)")
 	if err := downloadGPT2Weights(path); err != nil {
 		return "", fmt.Errorf("couldn't download GPT-2's weights: %w", err)
 	}
