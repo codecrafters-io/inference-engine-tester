@@ -68,6 +68,8 @@ marketing:
 
         The stages teach the forward pass from the start, so a vague idea of vectors is enough. Most learners pick up the layer shapes as they go.
 
+        The last stage runs GPT-2's real weights. To run it on your own machine, you'll download a 548 MB file, and your engine will need about 1 GB of memory.
+
         What matters most is curiosity and persistence. You'll develop intuition by exploring, debugging, and discovering solutions yourself.
 
         While we will make it extremely simple to get started, don't expect this to be a follow-along tutorial.
