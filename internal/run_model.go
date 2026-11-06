@@ -3,6 +3,7 @@ package internal
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -142,13 +143,29 @@ func parseJSON[T any](raw []byte) (T, error) {
 	dec.DisallowUnknownFields()
 	var out T
 	if err := dec.Decode(&out); err != nil {
-		return zero, fmt.Errorf("expected JSON on stdout: %w", err)
+		return zero, notJSONError(trimmed, err)
 	}
 	var extra any
 	if err := dec.Decode(&extra); err == nil {
 		return zero, fmt.Errorf("expected one JSON value on stdout, got extra data after it. Send debug output to stderr")
 	}
 	return out, nil
+}
+
+// notJSONError shows the first line the program printed, since that line is
+// usually a debug print or a value printed in the language's own syntax.
+func notJSONError(stdout []byte, err error) error {
+	line, _, _ := bytes.Cut(stdout, []byte("\n"))
+	shown := string(line)
+	if len(shown) > 120 {
+		shown = shown[:120] + "..."
+	}
+	message := fmt.Sprintf("expected JSON on stdout, but your program printed %q, which isn't JSON (%v).\n"+
+		"Print only the JSON result to stdout, and send debug output to stderr.", shown, err)
+	if (bytes.HasPrefix(line, []byte("[")) || bytes.HasPrefix(line, []byte("{"))) && bytes.ContainsRune(line, '\'') {
+		message += "\nJSON strings use double quotes, not single quotes. Encode the result with a JSON library, like json.dumps in Python."
+	}
+	return errors.New(message)
 }
 
 func near(want, got, atol, rtol float64) bool {
