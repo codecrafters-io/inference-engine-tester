@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/codecrafters-io/inference-engine-tester/internal/gpt2"
@@ -46,7 +47,7 @@ func testAttention(harness *test_case_harness.TestCaseHarness) error {
 		},
 		{
 			name:  "layer",
-			hint:  "Read the attention tensors for the layer in layer.json, like h.1.attn.c_attn.weight.",
+			hint:  "Read the attention tensors for the layer number in the arguments, like h.1.attn.c_attn.weight.",
 			cfg:   gpt2.Config{NEmbd: 1, NHead: 1, NLayer: 2, NPositions: 4, VocabSize: 2},
 			layer: 1,
 			input: [][]float64{{1}, {2}},
@@ -66,9 +67,8 @@ func testAttention(harness *test_case_harness.TestCaseHarness) error {
 		stdout, err := runModel(harness, testCase.name, []modelFile{
 			{name: "model.safetensors", data: file},
 			{name: "config.json", data: jsonBytes(testCase.cfg)},
-			{name: "layer.json", data: jsonBytes(testCase.layer)},
 			{name: "input.json", data: jsonBytes(testCase.input)},
-		}, []string{"attn", "model.safetensors", "config.json", "layer.json", "input.json"}, nil, 15*time.Second)
+		}, []string{"attn", "model.safetensors", "config.json", strconv.Itoa(testCase.layer), "input.json"}, nil, 15*time.Second)
 		if err != nil {
 			return err
 		}

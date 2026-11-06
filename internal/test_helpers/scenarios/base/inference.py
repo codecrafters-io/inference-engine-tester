@@ -26,14 +26,14 @@ def main():
     if command == "attn":
         weights = load(sys.argv[2])
         config = json.load(open(sys.argv[3]))
-        layer = json.load(open(sys.argv[4]))
+        layer = int(sys.argv[4])
         rows = json.load(open(sys.argv[5]))
         print(json.dumps(attention(weights, config, layer, rows)))
         return
     if command == "block":
         weights = load(sys.argv[2])
         config = json.load(open(sys.argv[3]))
-        layer = json.load(open(sys.argv[4]))
+        layer = int(sys.argv[4])
         rows = json.load(open(sys.argv[5]))
         print(json.dumps(block(weights, config, layer, rows)))
         return

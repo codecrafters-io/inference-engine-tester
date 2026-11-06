@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/codecrafters-io/inference-engine-tester/internal/gpt2"
@@ -21,7 +22,7 @@ func testTransformerBlock(harness *test_case_harness.TestCaseHarness) error {
 	}{
 		{name: "residual", hint: "Add the attention output onto the block's input, then add the MLP output onto that sum.", layer: 0, input: [][]float64{{1, 2}}, parts: zeroLayer(0, 2)},
 		{name: "gelu", hint: "Apply GELU, using the tanh formula, to every number after mlp.c_fc, then multiply by mlp.c_proj.weight.", layer: 0, input: [][]float64{{1, 2}}, parts: gelu},
-		{name: "layer", hint: "Read the block's tensors for the layer in layer.json, like h.1.mlp.c_fc.bias.", layer: 1, input: [][]float64{{1, 2}}, parts: layer1},
+		{name: "layer", hint: "Read the block's tensors for the layer number in the arguments, like h.1.mlp.c_fc.bias.", layer: 1, input: [][]float64{{1, 2}}, parts: layer1},
 	}
 	for _, testCase := range cases {
 		file := mustModel(tensorsFrom(testCase.parts))
@@ -36,9 +37,8 @@ func testTransformerBlock(harness *test_case_harness.TestCaseHarness) error {
 		stdout, err := runModel(harness, testCase.name, []modelFile{
 			{name: "model.safetensors", data: file},
 			{name: "config.json", data: jsonBytes(cfg)},
-			{name: "layer.json", data: jsonBytes(testCase.layer)},
 			{name: "input.json", data: jsonBytes(testCase.input)},
-		}, []string{"block", "model.safetensors", "config.json", "layer.json", "input.json"}, nil, 15*time.Second)
+		}, []string{"block", "model.safetensors", "config.json", strconv.Itoa(testCase.layer), "input.json"}, nil, 15*time.Second)
 		if err != nil {
 			return err
 		}
