@@ -1,5 +1,5 @@
 # Unallocated slugs, in order, for later extension stages:
-# vb8 bx7 gw0 vq5 gn7 rv6 ut0 ko9 du4 ok5 ag0
+# bx7 gw0 vq5 gn7 rv6 ut0 ko9 du4 ok5 ag0
 
 slug: "inference-engine"
 name: "Build your own Inference Engine"
@@ -91,6 +91,11 @@ stages:
     difficulty: medium
     marketing_md: |-
       In this stage, you'll implement the `attn` command to mix each token's row with the rows of the tokens before it.
+  - slug: "vb8"
+    name: "Residual connections"
+    difficulty: medium
+    marketing_md: |-
+      In this stage, you'll add the layer norm and the residual add around attention.
   - slug: "hu4"
     name: "Transformer block"
     difficulty: medium

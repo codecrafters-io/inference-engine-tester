@@ -48,6 +48,49 @@ func zeroLayer(layer, nEmbd int) []namedTensor {
 	}
 }
 
+// residualLayer is zeroLayer with attention that copies each row into its
+// query, key, and value and projects it back unchanged. The block's output
+// then depends on the layer norm and on the residual add, so a program that
+// echoes its input, or adds onto the normalized copy, gets a different answer.
+// zeroLayer alone cannot show any of that: with every attention tensor zero,
+// a correct block returns its input.
+func residualLayer(layer, nEmbd int) []namedTensor {
+	parts := zeroLayer(layer, nEmbd)
+	for _, attn := range identityQKV(layer, nEmbd) {
+		for i := range parts {
+			if parts[i].name == attn.name {
+				parts[i] = attn
+			}
+		}
+	}
+	return parts
+}
+
+// withMLPBump makes the MLP read the row it is given: the wide row keeps the
+// first two numbers of the normalized row, GELU applies to both, and the
+// projection puts them back. One number is negative and one positive, so a
+// wrong GELU shows up either way, and skipping ln_2 changes both.
+func withMLPBump(layer, nEmbd int) []namedTensor {
+	parts := residualLayer(layer, nEmbd)
+	inner := 4 * nEmbd
+	fc := zeros(nEmbd * inner)
+	proj := zeros(inner * nEmbd)
+	for i := 0; i < nEmbd; i++ {
+		fc[i*inner+i] = 1
+		proj[i*nEmbd+i] = 1
+	}
+	prefix := "h." + itoa(layer)
+	for i := range parts {
+		switch parts[i].name {
+		case prefix + ".mlp.c_fc.weight":
+			parts[i].values = fc
+		case prefix + ".mlp.c_proj.weight":
+			parts[i].values = proj
+		}
+	}
+	return parts
+}
+
 func withGeluBump(layer int, parts []namedTensor) []namedTensor {
 	inner := 8
 	bias := zeros(inner)

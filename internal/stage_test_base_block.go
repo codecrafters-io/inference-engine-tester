@@ -9,21 +9,74 @@ import (
 	"github.com/codecrafters-io/tester-utils/test_case_harness"
 )
 
+type blockCase struct {
+	name  string
+	hint  string
+	layer int
+	input [][]float64
+	parts []namedTensor
+}
+
+// testResidual covers the first half of a block: the layer norm before
+// attention, and adding attention's output onto the row it started from. The
+// MLP tensors stay zero, so a learner can leave the MLP for a later stage.
+func testResidual(harness *test_case_harness.TestCaseHarness) error {
+	cfg := gpt2.Config{NEmbd: 2, NHead: 1, NLayer: 2, NPositions: 4, VocabSize: 2}
+	cases := []blockCase{
+		{
+			name:  "residual",
+			hint:  "Layer-normalize a copy of each row with ln_1, run attention on the copies, then add attention's output onto the row it started from, not onto the copy.",
+			layer: 0,
+			input: [][]float64{{1, 2}},
+			parts: residualLayer(0, 2),
+		},
+		{
+			name:  "rows",
+			hint:  "Each row is normalized on its own numbers, and attention still uses only the rows before it.",
+			layer: 0,
+			input: [][]float64{{1, 2}, {3, 1}},
+			parts: residualLayer(0, 2),
+		},
+		{
+			name:  "layer",
+			hint:  "Read the tensors for the layer number in the arguments, like h.1.ln_1.weight.",
+			layer: 1,
+			input: [][]float64{{1, 2}},
+			parts: append(zeroLayer(0, 2), residualLayer(1, 2)...),
+		},
+	}
+	return runBlockCases(harness, cfg, cases)
+}
+
 func testTransformerBlock(harness *test_case_harness.TestCaseHarness) error {
 	cfg := gpt2.Config{NEmbd: 2, NHead: 1, NLayer: 2, NPositions: 4, VocabSize: 2}
-	gelu := withGeluBump(0, zeroLayer(0, 2))
-	layer1 := withGeluBump(1, append(zeroLayer(0, 2), zeroLayer(1, 2)...))
-	cases := []struct {
-		name  string
-		hint  string
-		layer int
-		input [][]float64
-		parts []namedTensor
-	}{
-		{name: "residual", hint: "Add the attention output onto the block's input, then add the MLP output onto that sum.", layer: 0, input: [][]float64{{1, 2}}, parts: zeroLayer(0, 2)},
-		{name: "gelu", hint: "Apply GELU, using the tanh formula, to every number after mlp.c_fc, then multiply by mlp.c_proj.weight.", layer: 0, input: [][]float64{{1, 2}}, parts: gelu},
-		{name: "layer", hint: "Read the block's tensors for the layer number in the arguments, like h.1.mlp.c_fc.bias.", layer: 1, input: [][]float64{{1, 2}}, parts: layer1},
+	cases := []blockCase{
+		{
+			name:  "gelu",
+			hint:  "Layer-normalize with ln_2, multiply by mlp.c_fc.weight, apply GELU with the tanh formula to every number, then multiply by mlp.c_proj.weight and add onto the row.",
+			layer: 0,
+			input: [][]float64{{1, 2}},
+			parts: withMLPBump(0, 2),
+		},
+		{
+			name:  "rows",
+			hint:  "The MLP works on one row at a time, on that row's own numbers after ln_2.",
+			layer: 0,
+			input: [][]float64{{1, 2}, {3, 1}},
+			parts: withMLPBump(0, 2),
+		},
+		{
+			name:  "layer",
+			hint:  "Read the block's tensors for the layer number in the arguments, like h.1.mlp.c_fc.weight.",
+			layer: 1,
+			input: [][]float64{{1, 2}},
+			parts: append(zeroLayer(0, 2), withMLPBump(1, 2)...),
+		},
 	}
+	return runBlockCases(harness, cfg, cases)
+}
+
+func runBlockCases(harness *test_case_harness.TestCaseHarness, cfg gpt2.Config, cases []blockCase) error {
 	for _, testCase := range cases {
 		file := mustModel(tensorsFrom(testCase.parts))
 		weights, err := gpt2.Load(file)
