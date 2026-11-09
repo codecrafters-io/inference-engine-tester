@@ -223,15 +223,15 @@ func near(want, got, atol, rtol float64) bool {
 
 func diffMatrix(want, got [][]float64, atol, rtol float64) string {
 	if len(want) != len(got) {
-		return fmt.Sprintf("expected %d rows, got %d", len(want), len(got))
+		return withExpectation(fmt.Sprintf("expected %d rows, got %d", len(want), len(got)), want, got)
 	}
 	for i := range want {
 		if len(got[i]) != len(want[i]) {
-			return fmt.Sprintf("row %d: expected %d values, got %d", i, len(want[i]), len(got[i]))
+			return withExpectation(fmt.Sprintf("row %d: expected %d values, got %d", i, len(want[i]), len(got[i])), want, got)
 		}
 		for j := range want[i] {
 			if !near(want[i][j], got[i][j], atol, rtol) {
-				return fmt.Sprintf("row %d, column %d: expected %v, got %v", i, j, want[i][j], got[i][j])
+				return withExpectation(fmt.Sprintf("row %d, column %d: expected %v, got %v", i, j, want[i][j], got[i][j]), want, got)
 			}
 		}
 	}
@@ -240,11 +240,11 @@ func diffMatrix(want, got [][]float64, atol, rtol float64) string {
 
 func diffVector(want, got []float64, atol, rtol float64) string {
 	if len(want) != len(got) {
-		return fmt.Sprintf("expected %d values, got %d", len(want), len(got))
+		return withExpectation(fmt.Sprintf("expected %d values, got %d", len(want), len(got)), want, got)
 	}
 	for i := range want {
 		if !near(want[i], got[i], atol, rtol) {
-			return fmt.Sprintf("value %d: expected %v, got %v", i, want[i], got[i])
+			return withExpectation(fmt.Sprintf("value %d: expected %v, got %v", i, want[i], got[i]), want, got)
 		}
 	}
 	return ""
@@ -252,12 +252,34 @@ func diffVector(want, got []float64, atol, rtol float64) string {
 
 func diffInts(want, got []int) string {
 	if len(want) != len(got) {
-		return fmt.Sprintf("expected %d tokens, got %d", len(want), len(got))
+		return withExpectation(fmt.Sprintf("expected %d tokens, got %d", len(want), len(got)), want, got)
 	}
 	for i := range want {
 		if want[i] != got[i] {
-			return fmt.Sprintf("token %d: expected %d, got %d", i, want[i], got[i])
+			return withExpectation(fmt.Sprintf("token %d: expected %d, got %d", i, want[i], got[i]), want, got)
 		}
 	}
 	return ""
+}
+
+// withExpectation appends the whole expected and printed values to a
+// difference. The first difference says where the output went wrong, and
+// seeing both values whole is what shows why: a transposed result, a row of
+// the right numbers in the wrong order, or an off-by-one all look alike when
+// you can only see one element of each.
+func withExpectation(message string, want, got any) string {
+	return fmt.Sprintf("%s\nexpected: %s\n     got: %s", message, asJSON(want), asJSON(got))
+}
+
+// asJSON renders a value the way the stage descriptions write it, truncated
+// so a large result cannot bury the difference above it.
+func asJSON(value any) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("%v", value)
+	}
+	if len(encoded) > 240 {
+		return string(encoded[:240]) + "..."
+	}
+	return string(encoded)
 }

@@ -54,3 +54,74 @@ func TestParseJSONReportsTheWrongShapeAsJSON(t *testing.T) {
 		}
 	}
 }
+
+// TestDiffsShowBothValues checks that every comparison a learner can hit
+// prints the whole expected and printed values, not only the first element
+// that differs. One element out of context looks the same whether the result
+// is transposed, shifted by one, or simply wrong.
+func TestDiffsShowBothValues(t *testing.T) {
+	cases := []struct {
+		name     string
+		message  string
+		contains []string
+	}{
+		{
+			name:     "matrix values",
+			message:  diffMatrix([][]float64{{1, 2}}, [][]float64{{1, 3}}, 1e-6, 0),
+			contains: []string{"row 0, column 1", "expected: [[1,2]]", "got: [[1,3]]"},
+		},
+		{
+			name:     "matrix rows",
+			message:  diffMatrix([][]float64{{1}, {2}}, [][]float64{{1}}, 1e-6, 0),
+			contains: []string{"expected 2 rows, got 1", "expected: [[1],[2]]", "got: [[1]]"},
+		},
+		{
+			name:     "matrix transposed",
+			message:  diffMatrix([][]float64{{1, 2}}, [][]float64{{1}, {2}}, 1e-6, 0),
+			contains: []string{"expected: [[1,2]]", "got: [[1],[2]]"},
+		},
+		{
+			name:     "vector",
+			message:  diffVector([]float64{1, 2}, []float64{1, 5}, 1e-6, 0),
+			contains: []string{"value 1", "expected: [1,2]", "got: [1,5]"},
+		},
+		{
+			name:     "ids",
+			message:  diffInts([]int{1, 2, 3}, []int{1, 3, 3}),
+			contains: []string{"token 1", "expected: [1,2,3]", "got: [1,3,3]"},
+		},
+	}
+	for _, testCase := range cases {
+		for _, want := range testCase.contains {
+			if !strings.Contains(testCase.message, want) {
+				t.Errorf("%s: message is missing %q:\n%s", testCase.name, want, testCase.message)
+			}
+		}
+	}
+}
+
+// TestDiffsStaySilentWhenEqual guards against the formatting above reporting a
+// difference that isn't there.
+func TestDiffsStaySilentWhenEqual(t *testing.T) {
+	if message := diffMatrix([][]float64{{1, 2}}, [][]float64{{1, 2}}, 1e-6, 0); message != "" {
+		t.Errorf("equal matrices reported %q", message)
+	}
+	if message := diffVector([]float64{1}, []float64{1}, 1e-6, 0); message != "" {
+		t.Errorf("equal vectors reported %q", message)
+	}
+	if message := diffInts([]int{1}, []int{1}); message != "" {
+		t.Errorf("equal ids reported %q", message)
+	}
+}
+
+// TestAsJSONTruncates keeps a large result from burying the difference.
+func TestAsJSONTruncates(t *testing.T) {
+	big := make([]int, 500)
+	rendered := asJSON(big)
+	if len(rendered) > 250 {
+		t.Errorf("a 500-value result rendered %d characters", len(rendered))
+	}
+	if !strings.HasSuffix(rendered, "...") {
+		t.Errorf("a truncated value should end in an ellipsis, got %q", rendered[max(0, len(rendered)-20):])
+	}
+}

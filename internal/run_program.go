@@ -85,29 +85,44 @@ func parseSummaries(raw []byte) ([]safetensors.Summary, error) {
 
 func diffSummaries(expected, actual []safetensors.Summary) (string, bool) {
 	if len(expected) != len(actual) {
-		return fmt.Sprintf("expected %d tensors, got %d", len(expected), len(actual)), true
+		return withExpectation(fmt.Sprintf("expected %d tensors, got %d", len(expected), len(actual)),
+			summaryNames(expected), summaryNames(actual)), true
 	}
+	// Past the count, the lists line up, so the whole lists would repeat
+	// themselves. Showing only the entry that differs keeps the difference in
+	// view, which matters most on the real weights and their 160 tensors.
 	for i := range expected {
 		want, got := expected[i], actual[i]
 		if want.Name != got.Name {
-			return fmt.Sprintf("tensor %d: expected name %q, got %q", i, want.Name, got.Name), true
+			return withExpectation(fmt.Sprintf("tensor %d: expected name %q, got %q", i, want.Name, got.Name), want, got), true
 		}
 		if want.DType != got.DType {
-			return fmt.Sprintf("%s: expected dtype %s, got %s", want.Name, want.DType, got.DType), true
+			return withExpectation(fmt.Sprintf("%s: expected dtype %s, got %s", want.Name, want.DType, got.DType), want, got), true
 		}
 		if !reflect.DeepEqual(want.Shape, got.Shape) {
-			return fmt.Sprintf("%s: expected shape %v, got %v", want.Name, want.Shape, got.Shape), true
+			return withExpectation(fmt.Sprintf("%s: expected shape %v, got %v", want.Name, want.Shape, got.Shape), want, got), true
 		}
 		if len(want.First) != len(got.First) {
-			return fmt.Sprintf("%s: expected %d values, got %d", want.Name, len(want.First), len(got.First)), true
+			return withExpectation(fmt.Sprintf("%s: expected %d values, got %d", want.Name, len(want.First), len(got.First)), want, got), true
 		}
 		for j := range want.First {
 			if math.Abs(want.First[j]-got.First[j]) > 1e-6 {
-				return fmt.Sprintf("%s: first value %d: expected %v, got %v", want.Name, j, want.First[j], got.First[j]), true
+				return withExpectation(fmt.Sprintf("%s: first value %d: expected %v, got %v", want.Name, j, want.First[j], got.First[j]), want, got), true
 			}
 		}
 	}
 	return "", false
+}
+
+// summaryNames lists tensor names, which is what a wrong count is usually
+// about: a skipped tensor, or an extra one the file holds but the stage says
+// to leave out.
+func summaryNames(summaries []safetensors.Summary) []string {
+	names := make([]string, len(summaries))
+	for i, summary := range summaries {
+		names[i] = summary.Name
+	}
+	return names
 }
 
 func headerPreview(file []byte) string {
