@@ -24,6 +24,9 @@ const (
 	// The test-runner pod is killed after 10 minutes, so a stalled download
 	// has to fail well before that.
 	gpt2DownloadTimeout = 3 * time.Minute
+
+	gpt2DownloadAttempts = 3
+	gpt2DownloadBackoff  = 2 * time.Second
 )
 
 // gpt2WeightsPath returns the path of GPT-2's real weights on this machine.
@@ -46,11 +49,33 @@ func gpt2WeightsPath(harness *test_case_harness.TestCaseHarness) (string, error)
 	}
 	harness.Logger.Infof("Downloading GPT-2's weights (548 MB)")
 	start := time.Now()
-	if err := downloadGPT2Weights(path); err != nil {
-		return "", fmt.Errorf("couldn't download GPT-2's weights: %w", err)
+	// A failed download is almost always the host having a bad minute, and it
+	// would otherwise fail the learner's submission for something they didn't
+	// do. Three tries still leave room under the stage's timeout.
+	var err error
+	for attempt := 1; attempt <= gpt2DownloadAttempts; attempt++ {
+		if err = downloadGPT2Weights(path); err == nil {
+			break
+		}
+		if attempt < gpt2DownloadAttempts {
+			harness.Logger.Infof("Download attempt %d failed (%s), retrying", attempt, err)
+			time.Sleep(time.Duration(attempt) * gpt2DownloadBackoff)
+		}
+	}
+	if err != nil {
+		return "", fmt.Errorf("couldn't download GPT-2's weights after %d attempts: %w", gpt2DownloadAttempts, err)
 	}
 	harness.Logger.Infof("Downloaded GPT-2's weights in %.1fs", time.Since(start).Seconds())
 	return path, nil
+}
+
+// weightsURL is gpt2WeightsURL unless CODECRAFTERS_GPT2_WEIGHTS_URL overrides
+// it, which lets the weights move to a bucket without a tester release.
+func weightsURL() string {
+	if url := os.Getenv("CODECRAFTERS_GPT2_WEIGHTS_URL"); url != "" {
+		return url
+	}
+	return gpt2WeightsURL
 }
 
 // downloadGPT2Weights streams the file to disk, so it never sits in memory,
@@ -59,14 +84,15 @@ func downloadGPT2Weights(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
+	url := weightsURL()
 	client := &http.Client{Timeout: gpt2DownloadTimeout}
-	response, err := client.Get(gpt2WeightsURL)
+	response, err := client.Get(url)
 	if err != nil {
 		return err
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s returned %s", gpt2WeightsURL, response.Status)
+		return fmt.Errorf("%s returned %s", url, response.Status)
 	}
 	partial, err := os.CreateTemp(filepath.Dir(path), "model-*.partial")
 	if err != nil {

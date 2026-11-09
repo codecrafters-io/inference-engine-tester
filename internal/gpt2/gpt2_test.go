@@ -2,6 +2,7 @@ package gpt2
 
 import (
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/codecrafters-io/inference-engine-tester/internal/safetensors"
@@ -134,7 +135,7 @@ func oneLayerFile(wte, wpe []float64) []safetensors.Tensor {
 	eye2 := []float64{1, 0, 0, 1}
 	return []safetensors.Tensor{
 		vec("wte.weight", []int{2, 2}, wte...),
-		vec("wpe.weight", []int{8, 2}, append(wpe, zero(12)...)...),
+		vec("wpe.weight", []int{8, 2}, append(append([]float64{}, wpe...), zero(16-len(wpe))...)...),
 		vec("ln_f.weight", []int{2}, 1, 1),
 		vec("ln_f.bias", []int{2}, 0, 0),
 		vec("h.0.ln_1.weight", []int{2}, 1, 1),
@@ -174,4 +175,77 @@ func assertClose(t *testing.T, got, want float64) {
 	if math.Abs(got-want) > 1e-9 {
 		t.Fatalf("got %v, want %v", got, want)
 	}
+}
+
+// TestPositionOfNewTokenChangesIDs guards the KV cache stage's fixture. That
+// stage's whole point is that a new token keeps its index in the whole
+// sequence as its position, so the fixture has to make a wrong position
+// visible in the ids. These wpe.weight rows are kvCacheWPE in the internal
+// package, and the prompts are its two test cases.
+func TestPositionOfNewTokenChangesIDs(t *testing.T) {
+	file := mustWrite(t, oneLayerFile(
+		[]float64{1, 0, 0, 1},
+		[]float64{0, 0, -2, 1, 1, -1, 0, 2, 1, 0},
+	))
+	w, err := Load(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{NEmbd: 2, NHead: 1, NLayer: 1, NPositions: 8, VocabSize: 2}
+	for _, prompt := range [][]int{{0, 1, 0}, {0, 1}} {
+		good, err := Generate(w, cfg, prompt, 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bad, err := generateAtPositionZero(w, cfg, prompt, 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if slices.Equal(good, bad) {
+			t.Fatalf("prompt %v: embedding every new token at position 0 gives the same ids %v, so the fixture cannot catch a wrong position", prompt, good)
+		}
+	}
+}
+
+// generateAtPositionZero is generate() with one mutation: every new token is
+// embedded at position 0 instead of its index in the whole sequence.
+func generateAtPositionZero(w *Weights, cfg Config, prompt []int, count int) ([]int, error) {
+	c := newCache(cfg)
+	ids := append([]int(nil), prompt...)
+	hidden, err := Embed(w, ids)
+	if err != nil {
+		return nil, err
+	}
+	for layer := 0; layer < cfg.NLayer; layer++ {
+		if hidden, err = blockCached(w, cfg, layer, hidden, &c); err != nil {
+			return nil, err
+		}
+	}
+	wpe, err := w.matrix("wpe.weight")
+	if err != nil {
+		return nil, err
+	}
+	wte, err := w.matrix("wte.weight")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]int, 0, count)
+	for step := 0; step < count; step++ {
+		next, err := pick(w, hidden[len(hidden)-1], 0, 0, 0)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, next)
+		row := [][]float64{make([]float64, cfg.NEmbd)}
+		for j := range row[0] {
+			row[0][j] = wte[next][j] + wpe[0][j]
+		}
+		for layer := 0; layer < cfg.NLayer; layer++ {
+			if row, err = blockCached(w, cfg, layer, row, &c); err != nil {
+				return nil, err
+			}
+		}
+		hidden = row
+	}
+	return out, nil
 }
