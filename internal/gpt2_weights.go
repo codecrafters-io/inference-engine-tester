@@ -15,9 +15,12 @@ import (
 
 const (
 	// gpt2WeightsURL is a public copy of Hugging Face's openai-community/gpt2
-	// model.safetensors. Serve it from the same region as the test runners so
-	// the download takes seconds.
-	gpt2WeightsURL    = "https://huggingface.co/openai-community/gpt2/resolve/main/model.safetensors"
+	// model.safetensors, in the same region as the test-runner cluster, so the
+	// download stays inside GCP and takes seconds. The bucket is Terraform's,
+	// in modules/storage/gpt2_weights_bucket.tf, and scripts/upload_gpt2_weights.sh
+	// fills it. CODECRAFTERS_GPT2_WEIGHTS_URL overrides this, which is how a
+	// staging run can read its own bucket instead.
+	gpt2WeightsURL    = "https://storage.googleapis.com/codecrafters-gpt2-weights-production/model.safetensors"
 	gpt2WeightsSHA256 = "248dfc3911869ec493c76e65bf2fcf7f615828b0254c12b473182f0f81d3a707"
 	gpt2WeightsSize   = 548105171
 
