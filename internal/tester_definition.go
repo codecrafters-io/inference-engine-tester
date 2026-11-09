@@ -13,6 +13,7 @@ var testerDefinition = tester_definition.TesterDefinition{
 		{Slug: "zf8", TestFunc: testReadSafetensors},
 		{Slug: "pq6", TestFunc: testEmbeddings},
 		{Slug: "mo0", TestFunc: testAttention},
+		{Slug: "vb8", TestFunc: testResidual},
 		{Slug: "hu4", TestFunc: testTransformerBlock},
 		{Slug: "wi3", TestFunc: testLogits},
 		{Slug: "hh8", TestFunc: testGreedyDecode},
