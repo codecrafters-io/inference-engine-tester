@@ -262,24 +262,34 @@ func diffInts(want, got []int) string {
 	return ""
 }
 
+// expectationLimit is how long a rendered value may be before showing it
+// stops helping. Every fixture in this tester is far smaller than this.
+const expectationLimit = 240
+
 // withExpectation appends the whole expected and printed values to a
-// difference. The first difference says where the output went wrong, and
-// seeing both values whole is what shows why: a transposed result, a row of
-// the right numbers in the wrong order, or an off-by-one all look alike when
-// you can only see one element of each.
+// difference, but only when both fit. The first difference says where the
+// output went wrong, and seeing both values whole is what shows why: a
+// transposed result, a row of the right numbers in the wrong order, and an
+// off-by-one all look alike when you can only see one element of each.
+//
+// Values too large to show are left out rather than truncated. A pair of
+// clipped values is worse than the precise difference on its own, because the
+// element that differs is usually past the clip.
 func withExpectation(message string, want, got any) string {
-	return fmt.Sprintf("%s\nexpected: %s\n     got: %s", message, asJSON(want), asJSON(got))
+	wantJSON, wantOK := asJSON(want)
+	gotJSON, gotOK := asJSON(got)
+	if !wantOK || !gotOK {
+		return message
+	}
+	return fmt.Sprintf("%s\nexpected: %s\n     got: %s", message, wantJSON, gotJSON)
 }
 
-// asJSON renders a value the way the stage descriptions write it, truncated
-// so a large result cannot bury the difference above it.
-func asJSON(value any) string {
+// asJSON renders a value the way the stage descriptions write it, and reports
+// whether it is short enough to be worth showing.
+func asJSON(value any) (string, bool) {
 	encoded, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Sprintf("%v", value)
+		return "", false
 	}
-	if len(encoded) > 240 {
-		return string(encoded[:240]) + "..."
-	}
-	return string(encoded)
+	return string(encoded), len(encoded) <= expectationLimit
 }

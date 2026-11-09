@@ -114,14 +114,21 @@ func TestDiffsStaySilentWhenEqual(t *testing.T) {
 	}
 }
 
-// TestAsJSONTruncates keeps a large result from burying the difference.
-func TestAsJSONTruncates(t *testing.T) {
+// TestLargeValuesAreLeftOut keeps a difference from being buried. A pair of
+// clipped values is worse than the precise difference alone, because the
+// element that differs is usually past the clip.
+func TestLargeValuesAreLeftOut(t *testing.T) {
 	big := make([]int, 500)
-	rendered := asJSON(big)
-	if len(rendered) > 250 {
-		t.Errorf("a 500-value result rendered %d characters", len(rendered))
+	other := make([]int, 500)
+	other[499] = 1
+	message := diffInts(big, other)
+	if !strings.Contains(message, "token 499") {
+		t.Errorf("message should still say where it differs:\n%s", message)
 	}
-	if !strings.HasSuffix(rendered, "...") {
-		t.Errorf("a truncated value should end in an ellipsis, got %q", rendered[max(0, len(rendered)-20):])
+	if strings.Contains(message, "expected: [") {
+		t.Errorf("a 500-value result should not be printed:\n%s", message)
+	}
+	if strings.Contains(message, "...") {
+		t.Errorf("values should be left out, not clipped:\n%s", message)
 	}
 }

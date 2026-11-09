@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 
 	"github.com/codecrafters-io/inference-engine-tester/internal/safetensors"
 	"github.com/codecrafters-io/tester-utils/test_case_harness"
@@ -85,8 +86,8 @@ func parseSummaries(raw []byte) ([]safetensors.Summary, error) {
 
 func diffSummaries(expected, actual []safetensors.Summary) (string, bool) {
 	if len(expected) != len(actual) {
-		return withExpectation(fmt.Sprintf("expected %d tensors, got %d", len(expected), len(actual)),
-			summaryNames(expected), summaryNames(actual)), true
+		return fmt.Sprintf("expected %d tensors, got %d.%s", len(expected), len(actual),
+			namesDiff(expected, actual)), true
 	}
 	// Past the count, the lists line up, so the whole lists would repeat
 	// themselves. Showing only the entry that differs keeps the difference in
@@ -114,15 +115,46 @@ func diffSummaries(expected, actual []safetensors.Summary) (string, bool) {
 	return "", false
 }
 
-// summaryNames lists tensor names, which is what a wrong count is usually
-// about: a skipped tensor, or an extra one the file holds but the stage says
-// to leave out.
-func summaryNames(summaries []safetensors.Summary) []string {
-	names := make([]string, len(summaries))
-	for i, summary := range summaries {
-		names[i] = summary.Name
+// namesDiff names the tensors that are missing or unexpected. A wrong count
+// is nearly always a skipped tensor or an extra one, and naming it beats
+// printing 160 names for the learner to compare by eye.
+func namesDiff(expected, actual []safetensors.Summary) string {
+	present := make(map[string]bool, len(actual))
+	for _, summary := range actual {
+		present[summary.Name] = true
 	}
-	return names
+	wanted := make(map[string]bool, len(expected))
+	for _, summary := range expected {
+		wanted[summary.Name] = true
+	}
+	var missing, unexpected []string
+	for _, summary := range expected {
+		if !present[summary.Name] {
+			missing = append(missing, summary.Name)
+		}
+	}
+	for _, summary := range actual {
+		if !wanted[summary.Name] {
+			unexpected = append(unexpected, summary.Name)
+		}
+	}
+	out := ""
+	if len(missing) > 0 {
+		out += "\nMissing: " + strings.Join(firstFew(missing), ", ")
+	}
+	if len(unexpected) > 0 {
+		out += "\nNot expected: " + strings.Join(firstFew(unexpected), ", ")
+	}
+	return out
+}
+
+// firstFew keeps a name list readable when many tensors are missing at once.
+func firstFew(names []string) []string {
+	const limit = 5
+	if len(names) <= limit {
+		return names
+	}
+	return append(names[:limit:limit], fmt.Sprintf("and %d more", len(names)-limit))
 }
 
 func headerPreview(file []byte) string {
