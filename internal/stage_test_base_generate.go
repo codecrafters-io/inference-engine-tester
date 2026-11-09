@@ -74,9 +74,42 @@ func testSampling(harness *test_case_harness.TestCaseHarness) error {
 	return nil
 }
 
+// kvCacheWPE gives positions 0 to 4 different rows, so an engine that embeds a
+// new token at the wrong position writes different ids. The earlier generate
+// stages zero wpe.weight, which leaves position handling untested until the
+// real weights in the final stage.
+var kvCacheWPE = []float64{0, 0, -2, 1, 1, -1, 0, 2, 1, 0}
+
 func testKVCache(harness *test_case_harness.TestCaseHarness) error {
 	cfg := gpt2.Config{NEmbd: 2, NHead: 1, NLayer: 1, NPositions: 8, VocabSize: 2}
-	return runGenerate(harness, "cache", "The ids must match a full recompute. Each new token uses its index in the whole sequence as its position.", cfg, []int{0}, map[string]any{"count": 3}, nil, withFinal(copyGPT([]float64{1, 0, 0, 1}, zeros(4)), []float64{0, 1}))
+	// ln_f is left as identity here, unlike the greedy and sampling stages, so
+	// the ids depend on the whole forward pass rather than on ln_f.bias alone.
+	parts := copyGPT([]float64{1, 0, 0, 1}, kvCacheWPE)
+	cases := []struct {
+		name  string
+		hint  string
+		ids   []int
+		count int
+	}{
+		{
+			name:  "prompt",
+			hint:  "Run every prompt row through the blocks first, in order, and keep each row's key and value. The first new token scores against all of them.",
+			ids:   []int{0, 1, 0},
+			count: 3,
+		},
+		{
+			name:  "positions",
+			hint:  "Each new token is embedded at its index in the whole sequence, not at position 0. The cache does not change which row of wpe.weight you add.",
+			ids:   []int{0, 1},
+			count: 3,
+		},
+	}
+	for _, testCase := range cases {
+		if err := runGenerate(harness, testCase.name, testCase.hint, cfg, testCase.ids, map[string]any{"count": testCase.count}, nil, parts); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func withFinal(parts []namedTensor, bias []float64) []namedTensor {

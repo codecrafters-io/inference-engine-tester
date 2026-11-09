@@ -16,6 +16,10 @@ import (
 // of at least 0.33 between the top two logits, so float32 and float64 engines
 // agree. Later steps have gaps as small as 0.007, which is why the stage stops
 // at six.
+// gpt2ProgramTimeout is how long the learner's program may run. The stage's
+// timeout in tester_definition.go has to cover this plus gpt2DownloadBudget.
+const gpt2ProgramTimeout = 300 * time.Second
+
 var (
 	gpt2Prompt   = []int{464, 3139, 286, 4881, 318}
 	gpt2Expected = []int{262, 3139, 286, 262, 4141, 2066}
@@ -58,17 +62,19 @@ func testRunGPT2(harness *test_case_harness.TestCaseHarness) error {
 	harness.Logger.Infof("$ ./your_program.sh %s", joinArgs(args))
 	executable := harness.NewExecutable()
 	executable.WorkingDir = workDir
-	executable.TimeoutInMilliseconds = int((300 * time.Second) / time.Millisecond)
+	executable.TimeoutInMilliseconds = int(gpt2ProgramTimeout / time.Millisecond)
 	start := time.Now()
 	result, err := executable.Run(args...)
 	if err != nil {
 		return fmt.Errorf("gpt2: %s", err.Error())
 	}
 	harness.Logger.Infof("Your program took %.1fs", time.Since(start).Seconds())
-	if result.ExitCode != 0 && len(result.Stdout) == 0 {
-		return withHint("gpt2",
-			fmt.Sprintf("your program exited with code %d and printed nothing to stdout", result.ExitCode),
-			"The test server gives your program about 2.5 GB of memory, and a program that uses more is stopped, often with exit code 137. Keep each weight as a 4-byte float read from the file, not as a separate object.")
+	if result.ExitCode != 0 {
+		hint := "Check stderr above for the error your program printed."
+		if len(result.Stdout) == 0 {
+			hint = "The test server gives your program about 2.5 GB of memory, and a program that uses more is stopped, often with exit code 137. Keep each weight as a 4-byte float read from the file, not as a separate object."
+		}
+		return withHint("gpt2", fmt.Sprintf("your program exited with code %d", result.ExitCode), hint)
 	}
 	got, err := parseJSON[[]int](result.Stdout)
 	if err != nil {

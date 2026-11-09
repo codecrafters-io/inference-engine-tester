@@ -222,12 +222,8 @@ func generate(w *Weights, cfg Config, prompt []int, count int, temperature, topP
 		}
 		out = append(out, next)
 		ids = append(ids, next)
-		row, err := Embed(w, ids[len(ids)-1:])
-		if err != nil {
-			return nil, err
-		}
-		// Embed uses position 0 for a one-id slice. The new token's position is
-		// its index in the full sequence.
+		// Embed would use position 0 for a one-id slice. The new token's
+		// position is its index in the full sequence, so build the row here.
 		wpe, err := w.matrix("wpe.weight")
 		if err != nil {
 			return nil, err
@@ -237,7 +233,10 @@ func generate(w *Weights, cfg Config, prompt []int, count int, temperature, topP
 			return nil, err
 		}
 		pos := len(ids) - 1
-		row[0] = make([]float64, len(wte[next]))
+		if pos >= len(wpe) {
+			return nil, fmt.Errorf("position %d is outside wpe.weight", pos)
+		}
+		row := [][]float64{make([]float64, len(wte[next]))}
 		for j := range row[0] {
 			row[0][j] = wte[next][j] + wpe[pos][j]
 		}
