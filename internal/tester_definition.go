@@ -18,9 +18,11 @@ var testerDefinition = tester_definition.TesterDefinition{
 		{Slug: "hh8", TestFunc: testGreedyDecode},
 		{Slug: "df2", TestFunc: testSampling},
 		{Slug: "rq5", TestFunc: testKVCache},
-		// About 15 seconds to download GPT-2's weights, then up to 300 seconds
-		// for the learner's program. This stays under the platform's 10-minute
-		// limit, so the learner sees the tester's message rather than a cutoff.
-		{Slug: "zr7", TestFunc: testRunGPT2, Timeout: 6 * time.Minute},
+		// Up to 90 seconds to download GPT-2's weights, which usually takes
+		// about 15, then up to 300 seconds for the learner's program. The 30
+		// seconds left over cover the tester's own work, and the total stays
+		// well under the platform's 10-minute limit, so the learner sees the
+		// tester's message rather than a cutoff.
+		{Slug: "zr7", TestFunc: testRunGPT2, Timeout: 7 * time.Minute},
 	},
 }

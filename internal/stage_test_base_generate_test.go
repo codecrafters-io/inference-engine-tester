@@ -3,6 +3,7 @@ package internal
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/codecrafters-io/inference-engine-tester/internal/gpt2"
 )
@@ -74,5 +75,25 @@ func TestKVCacheFixtureUsesTheForwardPass(t *testing.T) {
 	}
 	if slices.Equal(good, bad) {
 		t.Fatalf("dropping attention gives the same ids %v, so the fixture does not test the forward pass", good)
+	}
+}
+
+// TestRunGPT2TimeoutCoversDownloadAndProgram keeps the final stage's timeout
+// ahead of the work it has to allow. Retrying the download must never leave
+// too little time for a correct program, which would surface as a stage
+// cutoff rather than as a download error.
+func TestRunGPT2TimeoutCoversDownloadAndProgram(t *testing.T) {
+	var stageTimeout time.Duration
+	for _, testCase := range testerDefinition.TestCases {
+		if testCase.Slug == "zr7" {
+			stageTimeout = testCase.Timeout
+		}
+	}
+	if stageTimeout == 0 {
+		t.Fatal("the zr7 stage has no timeout")
+	}
+	needed := gpt2DownloadBudget + gpt2ProgramTimeout
+	if needed >= stageTimeout {
+		t.Fatalf("the download budget (%s) plus the program timeout (%s) is %s, which does not fit in the stage's %s", gpt2DownloadBudget, gpt2ProgramTimeout, needed, stageTimeout)
 	}
 }

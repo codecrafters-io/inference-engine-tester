@@ -16,6 +16,10 @@ import (
 // of at least 0.33 between the top two logits, so float32 and float64 engines
 // agree. Later steps have gaps as small as 0.007, which is why the stage stops
 // at six.
+// gpt2ProgramTimeout is how long the learner's program may run. The stage's
+// timeout in tester_definition.go has to cover this plus gpt2DownloadBudget.
+const gpt2ProgramTimeout = 300 * time.Second
+
 var (
 	gpt2Prompt   = []int{464, 3139, 286, 4881, 318}
 	gpt2Expected = []int{262, 3139, 286, 262, 4141, 2066}
@@ -58,7 +62,7 @@ func testRunGPT2(harness *test_case_harness.TestCaseHarness) error {
 	harness.Logger.Infof("$ ./your_program.sh %s", joinArgs(args))
 	executable := harness.NewExecutable()
 	executable.WorkingDir = workDir
-	executable.TimeoutInMilliseconds = int((300 * time.Second) / time.Millisecond)
+	executable.TimeoutInMilliseconds = int(gpt2ProgramTimeout / time.Millisecond)
 	start := time.Now()
 	result, err := executable.Run(args...)
 	if err != nil {

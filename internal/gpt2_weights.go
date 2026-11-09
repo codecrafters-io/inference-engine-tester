@@ -21,10 +21,11 @@ const (
 	gpt2WeightsSHA256 = "248dfc3911869ec493c76e65bf2fcf7f615828b0254c12b473182f0f81d3a707"
 	gpt2WeightsSize   = 548105171
 
-	// The test-runner pod is killed after 10 minutes, so a stalled download
-	// has to fail well before that.
-	gpt2DownloadTimeout = 3 * time.Minute
-
+	// The stage allows 5 minutes for the learner's program, so the download has
+	// to fit in what is left of the stage's timeout. This is the budget for all
+	// attempts together, not for each one, and a download that cannot finish
+	// inside it has to fail as a download rather than eat the program's time.
+	gpt2DownloadBudget   = 90 * time.Second
 	gpt2DownloadAttempts = 3
 	gpt2DownloadBackoff  = 2 * time.Second
 )
@@ -51,19 +52,27 @@ func gpt2WeightsPath(harness *test_case_harness.TestCaseHarness) (string, error)
 	start := time.Now()
 	// A failed download is almost always the host having a bad minute, and it
 	// would otherwise fail the learner's submission for something they didn't
-	// do. Three tries still leave room under the stage's timeout.
-	var err error
+	// do. Every attempt and backoff shares one deadline, so retrying can never
+	// borrow time from the learner's program.
+	deadline := time.Now().Add(gpt2DownloadBudget)
+	err := fmt.Errorf("no attempt was made within the %s budget", gpt2DownloadBudget)
 	for attempt := 1; attempt <= gpt2DownloadAttempts; attempt++ {
-		if err = downloadGPT2Weights(path); err == nil {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
 			break
 		}
-		if attempt < gpt2DownloadAttempts {
-			harness.Logger.Infof("Download attempt %d failed (%s), retrying", attempt, err)
-			time.Sleep(time.Duration(attempt) * gpt2DownloadBackoff)
+		if err = downloadGPT2Weights(path, remaining); err == nil {
+			break
 		}
+		backoff := time.Duration(attempt) * gpt2DownloadBackoff
+		if attempt == gpt2DownloadAttempts || time.Until(deadline) <= backoff {
+			break
+		}
+		harness.Logger.Infof("Download attempt %d failed (%s), retrying", attempt, err)
+		time.Sleep(backoff)
 	}
 	if err != nil {
-		return "", fmt.Errorf("couldn't download GPT-2's weights after %d attempts: %w", gpt2DownloadAttempts, err)
+		return "", fmt.Errorf("couldn't download GPT-2's weights within %s: %w", gpt2DownloadBudget, err)
 	}
 	harness.Logger.Infof("Downloaded GPT-2's weights in %.1fs", time.Since(start).Seconds())
 	return path, nil
@@ -79,13 +88,14 @@ func weightsURL() string {
 }
 
 // downloadGPT2Weights streams the file to disk, so it never sits in memory,
-// and only moves it into place once its size and SHA-256 match.
-func downloadGPT2Weights(path string) error {
+// and only moves it into place once its size and SHA-256 match. timeout caps
+// the whole request, including reading the body.
+func downloadGPT2Weights(path string, timeout time.Duration) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	url := weightsURL()
-	client := &http.Client{Timeout: gpt2DownloadTimeout}
+	client := &http.Client{Timeout: timeout}
 	response, err := client.Get(url)
 	if err != nil {
 		return err
