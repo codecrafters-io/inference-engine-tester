@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"math"
 	"math/rand"
 	"path/filepath"
 	"slices"
@@ -39,6 +40,7 @@ func caughtBy(seed int64) map[string][]gpt2.Bug {
 		cases  []matrixCase
 	}{
 		{"mo0", gpt2.Attention, attentionCases(rng)},
+		{"bx7", gpt2.Attention, headsCases(rng)},
 		{"vb8", gpt2.Block, residualCases(rng)},
 		{"hu4", gpt2.Block, transformerBlockCases(rng)},
 	}
@@ -87,7 +89,8 @@ func caughtBy(seed int64) map[string][]gpt2.Bug {
 // stages later on GPT-2's real weights.
 var stageBugs = map[string][]gpt2.Bug{
 	"pq6": embedBugs,
-	"mo0": bugList(attentionBugs, headBugs, []gpt2.Bug{gpt2.LayerZero}),
+	"mo0": bugList(attentionBugs, []gpt2.Bug{gpt2.LayerZero}),
+	"bx7": bugList(attentionBugs, headBugs, []gpt2.Bug{gpt2.LayerZero}),
 	"vb8": bugList(residualBugs, []gpt2.Bug{gpt2.LayerZero}),
 	"hu4": bugList(residualBugs, mlpBugs, []gpt2.Bug{gpt2.LayerZero}),
 	"wi3": bugList(logitsBugs, []gpt2.Bug{gpt2.LogitsOneLayer}),
@@ -143,13 +146,45 @@ func TestEveryBugHasAStageAndAHint(t *testing.T) {
 	}
 }
 
+// TestOneHeadEngineFailsTheHeadsStage is the check that the heads stage asks
+// for something: an engine that passed the stage before, with one head across
+// the whole row, has to fail every case here.
+func TestOneHeadEngineFailsTheHeadsStage(t *testing.T) {
+	for seed := int64(1); seed <= fixtureSeeds; seed++ {
+		for _, c := range headsCases(rand.New(rand.NewSource(seed))) {
+			_, w := loadParts(c.parts)
+			expected, _ := c.run(gpt2.Attention, w)
+			oneHead, _ := c.run(gpt2.Attention, w.WithBug(gpt2.AttnOneHead))
+			if !matricesApart(expected, oneHead) {
+				t.Errorf("seed %d, %s: a one-head engine prints the expected output", seed, c.name)
+			}
+		}
+	}
+}
+
+// TestHeadsExampleMatchesTheDescription pins the worked example the heads
+// stage's description prints.
+func TestHeadsExampleMatchesTheDescription(t *testing.T) {
+	c := headsCases(rand.New(rand.NewSource(1)))[0]
+	_, w := loadParts(c.parts)
+	got, _ := c.run(gpt2.Attention, w)
+	want := [][]float64{{1, 0}, {0.5, 0.7310585786300049}}
+	if diffMatrix(want, got, 1e-12, 0) != "" {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	oneHead, _ := c.run(gpt2.Attention, w.WithBug(gpt2.AttnOneHead))
+	if math.Abs(oneHead[1][0]-0.330) > 0.0005 || math.Abs(oneHead[1][1]-0.670) > 0.0005 {
+		t.Errorf("the description says one head gives [0.330, 0.670], got %v", oneHead[1])
+	}
+}
+
 // TestDiagnoseNamesTheBug feeds each bug's own output back in as if a learner
 // had printed it. The hint has to be that bug's, or the hint of another bug
 // that prints exactly the same thing on this case.
 func TestDiagnoseNamesTheBug(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	same := sameMatrix(1e-4, 0)
-	for _, c := range attentionCases(rng) {
+	for _, c := range slices.Concat(attentionCases(rng), headsCases(rng)) {
 		_, w := loadParts(c.parts)
 		mutants := c.mutants(gpt2.Attention, w)
 		for _, m := range mutants {
@@ -218,7 +253,7 @@ func TestReferencePassesOnSeveralSeeds(t *testing.T) {
 		t.Setenv("CODECRAFTERS_RANDOM_SEED", strconv.Itoa(seed))
 		code := RunCLI(map[string]string{
 			"CODECRAFTERS_REPOSITORY_DIR":  repo,
-			"CODECRAFTERS_TEST_CASES_JSON": `[{"slug":"pq6","tester_log_prefix":"stage-2","title":"Embed tokens"},{"slug":"mo0","tester_log_prefix":"stage-3","title":"Causal attention"},{"slug":"vb8","tester_log_prefix":"stage-4","title":"Residual connections"},{"slug":"hu4","tester_log_prefix":"stage-5","title":"Transformer block"},{"slug":"wi3","tester_log_prefix":"stage-6","title":"Logits"},{"slug":"hh8","tester_log_prefix":"stage-7","title":"Greedy decode"},{"slug":"df2","tester_log_prefix":"stage-8","title":"Sample a token"},{"slug":"rq5","tester_log_prefix":"stage-9","title":"KV cache"}]`,
+			"CODECRAFTERS_TEST_CASES_JSON": `[{"slug":"pq6","tester_log_prefix":"stage-2","title":"Embed tokens"},{"slug":"mo0","tester_log_prefix":"stage-3","title":"Causal attention"},{"slug":"bx7","tester_log_prefix":"stage-3b","title":"Multi-head attention"},{"slug":"vb8","tester_log_prefix":"stage-4","title":"Residual connections"},{"slug":"hu4","tester_log_prefix":"stage-5","title":"Transformer block"},{"slug":"wi3","tester_log_prefix":"stage-6","title":"Logits"},{"slug":"hh8","tester_log_prefix":"stage-7","title":"Greedy decode"},{"slug":"df2","tester_log_prefix":"stage-8","title":"Sample a token"},{"slug":"rq5","tester_log_prefix":"stage-9","title":"KV cache"}]`,
 		})
 		if code != 0 {
 			t.Fatalf("seed %d: reference solution failed, tester exit code %d", seed, code)
