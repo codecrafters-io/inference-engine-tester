@@ -91,24 +91,6 @@ func withMLPBump(layer, nEmbd int) []namedTensor {
 	return parts
 }
 
-func withGeluBump(layer int, parts []namedTensor) []namedTensor {
-	inner := 8
-	bias := zeros(inner)
-	bias[0] = 1
-	proj := zeros(inner * 2)
-	proj[0] = 1
-	prefix := "h." + itoa(layer)
-	for i := range parts {
-		if parts[i].name == prefix+".mlp.c_fc.bias" {
-			parts[i].values = bias
-		}
-		if parts[i].name == prefix+".mlp.c_proj.weight" {
-			parts[i].values = proj
-		}
-	}
-	return parts
-}
-
 func identityQKV(layer, nEmbd int) []namedTensor {
 	width := 3 * nEmbd
 	weight := make([]float64, nEmbd*width)

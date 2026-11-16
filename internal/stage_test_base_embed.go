@@ -2,54 +2,70 @@ package internal
 
 import (
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/codecrafters-io/inference-engine-tester/internal/gpt2"
-	"github.com/codecrafters-io/inference-engine-tester/internal/safetensors"
 	"github.com/codecrafters-io/tester-utils/test_case_harness"
 )
 
-func testEmbeddings(harness *test_case_harness.TestCaseHarness) error {
-	cases := []struct {
-		name    string
-		hint    string
-		tensors []safetensors.Tensor
-		ids     []int
-	}{
+type embedCase struct {
+	name  string
+	hint  string
+	parts []namedTensor
+	ids   []int
+	bugs  []gpt2.Bug
+}
+
+var embedBugs = []gpt2.Bug{gpt2.EmbedNoPosition, gpt2.EmbedPositionByID, gpt2.EmbedTokenByIndex}
+
+const embedHint = "Add row id of wte.weight to row i of wpe.weight, where i is the id's index in ids.json."
+
+func (c embedCase) mutants(weights *gpt2.Weights) []mutant[[][]float64] {
+	return mutantsOf(weights, c.bugs, func(w *gpt2.Weights) ([][]float64, error) { return gpt2.Embed(w, c.ids) })
+}
+
+func embedCases(rng *rand.Rand) []embedCase {
+	const vocab, positions, nEmbd = 5, 6, 4
+	return []embedCase{
+		// The stage description's worked example.
 		{
 			name: "add",
-			hint: "Add row id of wte.weight to row i of wpe.weight, where i is the id's index in ids.json.",
-			tensors: []safetensors.Tensor{
-				f32Tensor("wte.weight", []int{2, 2}, 1, 2, 3, 4),
-				f32Tensor("wpe.weight", []int{2, 2}, 10, 20, 30, 40),
+			hint: embedHint,
+			parts: []namedTensor{
+				{"wte.weight", []int{2, 2}, []float64{1, 2, 3, 4}},
+				{"wpe.weight", []int{2, 2}, []float64{10, 20, 30, 40}},
 			},
-			ids: []int{1, 0},
+			ids:  []int{1, 0},
+			bugs: embedBugs,
 		},
-		{
-			name: "position",
-			hint: "The same id at two positions gives two different rows. Add the position row for each index.",
-			tensors: []safetensors.Tensor{
-				f32Tensor("wte.weight", []int{2, 2}, 1, 2, 3, 4),
-				f32Tensor("wpe.weight", []int{2, 2}, 10, 20, 30, 40),
-			},
-			ids: []int{0, 0},
-		},
-		{
-			name: "lookup",
-			hint: "Use each id to pick its row of wte.weight, and its index in ids.json to pick the row of wpe.weight.",
-			tensors: []safetensors.Tensor{
-				f32Tensor("wte.weight", []int{2, 2}, 1, 2, 3, 4),
-				f32Tensor("wpe.weight", []int{3, 2}, 10, 20, 30, 40, 50, 60),
-			},
-			ids: []int{1, 1, 0},
-		},
+		// Random tables, so the rows can't be known ahead of the run. The ids
+		// repeat and are out of order, which is what tells a token id from a
+		// position.
+		settle(rng, "lookup", func(rng *rand.Rand) (embedCase, bool) {
+			c := embedCase{
+				name: "lookup",
+				hint: embedHint,
+				parts: []namedTensor{
+					randomTensor(rng, "wte.weight", vocab, nEmbd),
+					randomTensor(rng, "wpe.weight", positions, nEmbd),
+				},
+				ids:  randomIDs(rng, 4, vocab),
+				bugs: embedBugs,
+			}
+			_, weights := loadParts(c.parts)
+			expected, err := gpt2.Embed(weights, c.ids)
+			if err != nil {
+				return c, false
+			}
+			return c, allCaught(c.bugs, c.mutants(weights), expected, matricesApart)
+		}),
 	}
-	for _, testCase := range cases {
-		file := mustModel(testCase.tensors)
-		weights, err := gpt2.Load(file)
-		if err != nil {
-			return err
-		}
+}
+
+func testEmbeddings(harness *test_case_harness.TestCaseHarness) error {
+	for _, testCase := range embedCases(newFixtureRand()) {
+		file, weights := loadParts(testCase.parts)
 		expected, err := gpt2.Embed(weights, testCase.ids)
 		if err != nil {
 			return err
@@ -66,7 +82,8 @@ func testEmbeddings(harness *test_case_harness.TestCaseHarness) error {
 			return fmt.Errorf("%s: %w", testCase.name, err)
 		}
 		if message := diffMatrix(expected, got, 1e-5, 0); message != "" {
-			return withHint(testCase.name, message, testCase.hint)
+			hint := diagnose(got, testCase.mutants(weights), sameMatrix(1e-5, 0), testCase.hint)
+			return withHint(testCase.name, message, hint)
 		}
 		harness.Logger.Successf("%s passed", testCase.name)
 	}

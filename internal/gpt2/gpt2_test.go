@@ -92,23 +92,23 @@ func TestSampleKeepsSmallestTopPSet(t *testing.T) {
 	}
 	// top-p 0.75 keeps 0.7 and then 0.2. Random 0.95 lands in the second kept token
 	// after renormalizing. Order by probability is 2, 1, 0.
-	got := sampleToken(logits, 0.75, 0.95)
+	got := sampleToken(logits, 1, 0.75, 0.95, NoBug)
 	if got != 1 {
 		t.Fatalf("expected token 1, got %d", got)
 	}
 	// A random number inside the first kept token's renormalized mass stays there.
 	// 0.7/0.9 ≈ 0.777, so 0.5 selects token 2.
-	if sampleToken(logits, 0.75, 0.5) != 2 {
+	if sampleToken(logits, 1, 0.75, 0.5, NoBug) != 2 {
 		t.Fatal("expected the top token")
 	}
 }
 
 func TestSampleTieBreaksByLowerID(t *testing.T) {
 	// Equal logits. Sorted order is 0 then 1. The first half of the line is token 0.
-	if sampleToken([]float64{0, 0}, 1, 0.4) != 0 {
+	if sampleToken([]float64{0, 0}, 1, 1, 0.4, NoBug) != 0 {
 		t.Fatal("expected the lower id")
 	}
-	if sampleToken([]float64{0, 0}, 1, 0.6) != 1 {
+	if sampleToken([]float64{0, 0}, 1, 1, 0.6, NoBug) != 1 {
 		t.Fatal("expected the higher id once the first half is passed")
 	}
 }
@@ -197,7 +197,7 @@ func TestPositionOfNewTokenChangesIDs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		bad, err := generateAtPositionZero(w, cfg, prompt, 3)
+		bad, err := Generate(w.WithBug(CachePositionZero), cfg, prompt, 3)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -205,47 +205,4 @@ func TestPositionOfNewTokenChangesIDs(t *testing.T) {
 			t.Fatalf("prompt %v: embedding every new token at position 0 gives the same ids %v, so the fixture cannot catch a wrong position", prompt, good)
 		}
 	}
-}
-
-// generateAtPositionZero is generate() with one mutation: every new token is
-// embedded at position 0 instead of its index in the whole sequence.
-func generateAtPositionZero(w *Weights, cfg Config, prompt []int, count int) ([]int, error) {
-	c := newCache(cfg)
-	ids := append([]int(nil), prompt...)
-	hidden, err := Embed(w, ids)
-	if err != nil {
-		return nil, err
-	}
-	for layer := 0; layer < cfg.NLayer; layer++ {
-		if hidden, err = blockCached(w, cfg, layer, hidden, &c); err != nil {
-			return nil, err
-		}
-	}
-	wpe, err := w.matrix("wpe.weight")
-	if err != nil {
-		return nil, err
-	}
-	wte, err := w.matrix("wte.weight")
-	if err != nil {
-		return nil, err
-	}
-	out := make([]int, 0, count)
-	for step := 0; step < count; step++ {
-		next, err := pick(w, hidden[len(hidden)-1], 0, 0, 0)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, next)
-		row := [][]float64{make([]float64, cfg.NEmbd)}
-		for j := range row[0] {
-			row[0][j] = wte[next][j] + wpe[0][j]
-		}
-		for layer := 0; layer < cfg.NLayer; layer++ {
-			if row, err = blockCached(w, cfg, layer, row, &c); err != nil {
-				return nil, err
-			}
-		}
-		hidden = row
-	}
-	return out, nil
 }
