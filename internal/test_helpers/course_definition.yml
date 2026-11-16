@@ -1,5 +1,5 @@
 # Unallocated slugs, in order, for later extension stages:
-# bx7 gw0 vq5 gn7 rv6 ut0 ko9 du4 ok5 ag0
+# gw0 vq5 gn7 rv6 ut0 ko9 du4 ok5 ag0
 
 slug: "inference-engine"
 name: "Build your own Inference Engine"
@@ -13,6 +13,8 @@ description_md: |-
 
 short_description_md: |-
   Learn about attention, the transformer, and more
+
+concept_slugs: ["tensors"]
 
 completion_percentage: 5
 
@@ -45,10 +47,11 @@ marketing:
         At the end, you'll have a GitHub repo to show off.
     - question_markdown: "What exactly will I learn?"
       answer_markdown: |-
-        In the first 9 stages, you'll learn:
+        In the 11 stages, you'll learn:
         * How a safetensors file stores tensor names, shapes, and raw weights
         * How token embeddings and position embeddings add together
         * How causal self-attention mixes earlier tokens into the current one
+        * How splitting each row into heads lets attention weigh earlier tokens in several ways at once
         * How a transformer block combines attention, a feed-forward layer, and residual connections
         * How the last position becomes a score for every token
         * How greedy decoding repeats that computation
@@ -77,35 +80,42 @@ marketing:
 
 stages:
   - slug: "zf8"
+    concept_slugs: ["tensors"]
     name: "Read safetensors"
     difficulty: very_easy
     marketing_md: |-
-      In this stage, you'll implement the `inspect` command to read a safetensors file's tensor names, shapes, and values.
+      In this stage, you'll implement the `inspect` command to print what's inside a trained model's file.
   - slug: "pq6"
+    concept_slugs: ["tensors"]
     name: "Embed tokens"
     difficulty: easy
     marketing_md: |-
-      In this stage, you'll implement the `embed` command to add token embeddings and position embeddings.
+      In this stage, you'll implement the `embed` command to turn each token id into a row of numbers.
   - slug: "mo0"
     name: "Causal attention"
     difficulty: medium
     marketing_md: |-
-      In this stage, you'll implement the `attn` command to mix each token's row with the rows of the tokens before it.
+      In this stage, you'll implement the `attn` command to mix each token's row with itself and the rows before it.
+  - slug: "bx7"
+    name: "Multi-head attention"
+    difficulty: medium
+    marketing_md: |-
+      In this stage, you'll extend the `attn` command to split each row into slices that each get their own weights.
   - slug: "vb8"
     name: "Residual connections"
     difficulty: medium
     marketing_md: |-
-      In this stage, you'll add the layer norm and the residual add around attention.
+      In this stage, you'll implement the `block` command to run attention inside a layer norm and a residual add.
   - slug: "hu4"
     name: "Transformer block"
     difficulty: medium
     marketing_md: |-
-      In this stage, you'll implement the `block` command to run one transformer block.
+      In this stage, you'll finish the `block` command by adding the MLP that follows attention.
   - slug: "wi3"
     name: "Logits"
     difficulty: medium
     marketing_md: |-
-      In this stage, you'll implement the `logits` command to run every layer and print the logits for the last position.
+      In this stage, you'll implement the `logits` command to score every token as the next one.
   - slug: "hh8"
     name: "Greedy decode"
     difficulty: medium
@@ -115,7 +125,7 @@ stages:
     name: "Sample a token"
     difficulty: medium
     marketing_md: |-
-      In this stage, you'll add temperature and top-p sampling to `generate`, using one random number from stdin per token.
+      In this stage, you'll add sampling to `generate`, to pick each new token at random, weighted by its probability.
   - slug: "rq5"
     name: "KV cache"
     difficulty: hard
