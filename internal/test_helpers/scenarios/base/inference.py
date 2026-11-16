@@ -100,7 +100,7 @@ def load(path):
             continue
         start, end = info["data_offsets"]
         # A zero-copy view of the file's bytes as 32-bit floats. Unpacking GPT-2's
-        # 124 million numbers into Python floats would need about 6 GB.
+        # 124 million numbers into Python floats would need about 4 GB.
         weights[name] = (info["shape"], memoryview(data)[start:end].cast("f"))
     return weights
 

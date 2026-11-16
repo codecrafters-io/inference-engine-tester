@@ -1,85 +1,67 @@
 package internal
 
 import (
-	"fmt"
-	"strconv"
-	"time"
+	"math/rand"
 
 	"github.com/codecrafters-io/inference-engine-tester/internal/gpt2"
 	"github.com/codecrafters-io/tester-utils/test_case_harness"
 )
 
-func testAttention(harness *test_case_harness.TestCaseHarness) error {
-	type attentionCase struct {
-		name  string
-		hint  string
-		cfg   gpt2.Config
-		layer int
-		input [][]float64
-		parts []namedTensor
+// attentionBugs change the answer for any number of heads. headBugs only show
+// with more than one head, where the head size is no longer n_embd.
+var (
+	attentionBugs = []gpt2.Bug{
+		gpt2.AttnNoMask, gpt2.AttnNoScale, gpt2.AttnNoWeights, gpt2.AttnNoBias,
+		gpt2.AttnSwapQK, gpt2.AttnNoProj, gpt2.AttnNoProjBias,
 	}
-	layer1 := identityQKV(1, 1)
-	layer1[3].values[0] = 5
-	cases := []attentionCase{
+	headBugs = []gpt2.Bug{gpt2.AttnOneHead, gpt2.AttnScaleByEmbd}
+)
+
+const attentionHint = "Multiply each row by c_attn.weight and add c_attn.bias, split the result into the query, key, and value, and for each head take the softmax of the scores for the positions up to this one. Then multiply the joined heads by c_proj.weight and add c_proj.bias."
+
+func attentionCases(rng *rand.Rand) []matrixCase {
+	random := func(layers int) func(*rand.Rand) []namedTensor {
+		return func(rng *rand.Rand) []namedTensor {
+			var parts []namedTensor
+			for layer := 0; layer < layers; layer++ {
+				parts = append(parts, randomAttention(rng, layer, 4)...)
+			}
+			return parts
+		}
+	}
+	return []matrixCase{
+		// The stage description's worked example: one head of size 1 that
+		// copies each row into its query, key, and value.
 		{
 			name:  "causal",
 			hint:  "Each position uses only the scores for itself and earlier positions. Drop the later scores before the softmax.",
 			cfg:   gpt2.Config{NEmbd: 1, NHead: 1, NLayer: 1, NPositions: 4, VocabSize: 2},
-			layer: 0,
 			input: [][]float64{{1}, {2}},
 			parts: identityQKV(0, 1),
+			bugs:  attentionBugs,
 		},
-		{
-			name:  "scale",
-			hint:  "Divide each score by the square root of the head size, n_embd / n_head, before the softmax.",
-			cfg:   gpt2.Config{NEmbd: 2, NHead: 1, NLayer: 1, NPositions: 4, VocabSize: 2},
-			layer: 0,
-			input: [][]float64{{1, 0}, {0, 1}},
-			parts: identityQKV(0, 2),
-		},
-		{
-			name:  "heads",
-			hint:  "Split the query, key, and value into n_head heads, and run the softmax separately for each head.",
-			cfg:   gpt2.Config{NEmbd: 2, NHead: 2, NLayer: 1, NPositions: 4, VocabSize: 2},
-			layer: 0,
-			input: [][]float64{{1, 0}, {0, 1}},
-			parts: identityQKV(0, 2),
-		},
-		{
+		randomMatrixCase(rng, gpt2.Attention, matrixCase{
+			name: "one-head",
+			hint: attentionHint,
+			cfg:  gpt2.Config{NEmbd: 4, NHead: 1, NLayer: 1, NPositions: 4, VocabSize: 2},
+			bugs: attentionBugs,
+		}, 3, random(1)),
+		randomMatrixCase(rng, gpt2.Attention, matrixCase{
+			name: "heads",
+			hint: attentionHint,
+			cfg:  gpt2.Config{NEmbd: 4, NHead: 2, NLayer: 1, NPositions: 4, VocabSize: 2},
+			bugs: bugList(attentionBugs, headBugs),
+		}, 3, random(1)),
+		randomMatrixCase(rng, gpt2.Attention, matrixCase{
 			name:  "layer",
-			hint:  "Read the attention tensors for the layer number in the arguments, like h.1.attn.c_attn.weight.",
-			cfg:   gpt2.Config{NEmbd: 1, NHead: 1, NLayer: 2, NPositions: 4, VocabSize: 2},
+			hint:  attentionHint,
+			cfg:   gpt2.Config{NEmbd: 4, NHead: 2, NLayer: 2, NPositions: 4, VocabSize: 2},
 			layer: 1,
-			input: [][]float64{{1}, {2}},
-			parts: append(identityQKV(0, 1), layer1...),
-		},
+			bugs:  bugList(attentionBugs, headBugs, []gpt2.Bug{gpt2.LayerZero}),
+		}, 3, random(2)),
 	}
-	for _, testCase := range cases {
-		file := mustModel(tensorsFrom(testCase.parts))
-		weights, err := gpt2.Load(file)
-		if err != nil {
-			return err
-		}
-		expected, err := gpt2.Attention(weights, testCase.cfg, testCase.layer, testCase.input)
-		if err != nil {
-			return err
-		}
-		stdout, err := runModel(harness, testCase.name, []modelFile{
-			{name: "model.safetensors", data: file},
-			{name: "config.json", data: jsonBytes(testCase.cfg)},
-			{name: "input.json", data: jsonBytes(testCase.input)},
-		}, []string{"attn", "model.safetensors", "config.json", strconv.Itoa(testCase.layer), "input.json"}, nil, 15*time.Second)
-		if err != nil {
-			return err
-		}
-		got, err := parseJSON[[][]float64](stdout)
-		if err != nil {
-			return fmt.Errorf("%s: %w", testCase.name, err)
-		}
-		if message := diffMatrix(expected, got, 1e-4, 0); message != "" {
-			return withHint(testCase.name, message, testCase.hint)
-		}
-		harness.Logger.Successf("%s passed", testCase.name)
-	}
-	return nil
+}
+
+func testAttention(harness *test_case_harness.TestCaseHarness) error {
+	return runMatrixCases(harness, "attn", gpt2.Attention, attentionCases(newFixtureRand()))
 }

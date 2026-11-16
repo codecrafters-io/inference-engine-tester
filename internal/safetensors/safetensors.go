@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 // Tensor is one named array in a safetensors file.
@@ -227,8 +229,10 @@ func numel(shape []int) int {
 }
 
 // Describe returns one line per tensor, in the order the file stores them, with
-// up to 16 values each. The tester logs these lines so a learner can see the
-// weights it wrote.
+// up to 64 values each. That is every value of every tensor in the tester's
+// own models, so a learner can work a wrong answer through by hand. Floats are
+// written the short way a 32-bit float reads back, 0.37 rather than
+// 0.3700000047683716.
 func Describe(file []byte) ([]string, error) {
 	header, data, err := parseFile(file)
 	if err != nil {
@@ -261,18 +265,25 @@ func Describe(file []byte) ([]string, error) {
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].start < entries[j].start })
 
-	const limit = 16
+	const limit = 64
 	lines := make([]string, 0, len(entries))
 	for _, e := range entries {
 		values, err := firstValues(e.dtype, data[e.start:e.end], limit)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", e.name, err)
 		}
-		text := fmt.Sprint(values)
-		if numel(e.shape) > limit {
-			text = text[:len(text)-1] + " ...]"
+		bits := 64
+		if e.dtype == "F32" {
+			bits = 32
 		}
-		lines = append(lines, fmt.Sprintf("%s %s %v: %s", e.name, e.dtype, e.shape, text))
+		shown := make([]string, len(values))
+		for i, value := range values {
+			shown[i] = strconv.FormatFloat(value, 'g', -1, bits)
+		}
+		if numel(e.shape) > limit {
+			shown = append(shown, "...")
+		}
+		lines = append(lines, fmt.Sprintf("%s %s %v: [%s]", e.name, e.dtype, e.shape, strings.Join(shown, " ")))
 	}
 	return lines, nil
 }
