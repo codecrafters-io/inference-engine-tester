@@ -1,8 +1,12 @@
 package internal
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/codecrafters-io/tester-utils/executable"
 )
 
 func TestParseJSONShowsANonJSONFirstLine(t *testing.T) {
@@ -130,5 +134,23 @@ func TestLargeValuesAreLeftOut(t *testing.T) {
 	}
 	if strings.Contains(message, "...") {
 		t.Errorf("values should be left out, not clipped:\n%s", message)
+	}
+}
+
+// TestGPT2RunHints checks the two failures a learner can't diagnose from the
+// error alone: running out of time, and running out of memory.
+func TestGPT2RunHints(t *testing.T) {
+	if hint := gpt2RunHint(errors.New("execution timed out")); !strings.Contains(hint, "KV cache") {
+		t.Errorf("a timeout should point at the KV cache, got %q", hint)
+	}
+	memory := fmt.Errorf("process exceeded memory limit (2 GB): %w", executable.ErrMemoryLimitExceeded)
+	if hint := gpt2RunHint(memory); !strings.Contains(hint, "2 GB") {
+		t.Errorf("a memory stop should name the limit, got %q", hint)
+	}
+	if limit := executable.GetMemoryLimitInBytes(); limit != 2<<30 {
+		t.Errorf("the memory limit is %d bytes, so the hint's 2 GB is out of date", limit)
+	}
+	if hint := gpt2RunHint(errors.New("your_program.sh not found")); hint != "" {
+		t.Errorf("an unrelated error got the hint %q", hint)
 	}
 }

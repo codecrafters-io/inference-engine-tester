@@ -1,13 +1,16 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/codecrafters-io/inference-engine-tester/internal/gpt2"
 	"github.com/codecrafters-io/inference-engine-tester/internal/gpt2text"
+	"github.com/codecrafters-io/tester-utils/executable"
 	"github.com/codecrafters-io/tester-utils/test_case_harness"
 )
 
@@ -60,19 +63,19 @@ func testRunGPT2(harness *test_case_harness.TestCaseHarness) error {
 
 	args := []string{"generate", "model.safetensors", "config.json", "ids.json", "tokens.json"}
 	harness.Logger.Infof("$ ./your_program.sh %s", joinArgs(args))
-	executable := harness.NewExecutable()
-	executable.WorkingDir = workDir
-	executable.TimeoutInMilliseconds = int(gpt2ProgramTimeout / time.Millisecond)
+	program := harness.NewExecutable()
+	program.WorkingDir = workDir
+	program.TimeoutInMilliseconds = int(gpt2ProgramTimeout / time.Millisecond)
 	start := time.Now()
-	result, err := executable.Run(args...)
+	result, err := program.Run(args...)
 	if err != nil {
-		return fmt.Errorf("gpt2: %s", err.Error())
+		return withHint("gpt2", err.Error(), gpt2RunHint(err))
 	}
 	harness.Logger.Infof("Your program took %.1fs", time.Since(start).Seconds())
 	if result.ExitCode != 0 {
 		hint := "Check stderr above for the error your program printed."
 		if len(result.Stdout) == 0 {
-			hint = "The test server gives your program about 2.5 GB of memory, and a program that uses more is stopped, often with exit code 137. Keep each weight as a 4-byte float read from the file, not as a separate object."
+			hint = gpt2MemoryHint
 		}
 		return withHint("gpt2", fmt.Sprintf("your program exited with code %d", result.ExitCode), hint)
 	}
@@ -88,6 +91,21 @@ func testRunGPT2(harness *test_case_harness.TestCaseHarness) error {
 	}
 	harness.Logger.Successf("Your engine matches GPT-2")
 	return nil
+}
+
+const gpt2MemoryHint = "The test server gives your program 2 GB of memory, and stops a program that uses more. GPT-2's weights are 548 MB in the file. Keep each one as the 4-byte float the loader returns, not as a separate object."
+
+// gpt2RunHint explains the two ways a correct engine fails to finish on the
+// real weights. Without a hint, all a learner sees is "execution timed out" or
+// "process exceeded memory limit".
+func gpt2RunHint(err error) string {
+	switch {
+	case errors.Is(err, executable.ErrMemoryLimitExceeded):
+		return gpt2MemoryHint
+	case strings.Contains(err.Error(), "timed out"):
+		return fmt.Sprintf("Your program has %d seconds. An engine that runs the whole sequence again for every new token is too slow on GPT-2's 12 layers. Check that generate reuses the keys and values it cached, the way the KV cache stage does, and only runs the new token through the blocks.", int(gpt2ProgramTimeout/time.Second))
+	}
+	return ""
 }
 
 // gpt2Hint points at the likely bug from where the ids first go wrong.

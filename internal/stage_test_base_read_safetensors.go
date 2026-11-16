@@ -7,14 +7,27 @@ import (
 
 func testReadSafetensors(harness *test_case_harness.TestCaseHarness) error {
 	cases := []inspectCase{
+		// The stage description's worked example.
 		{
 			name: "scale",
-			hint: "Read the 8-byte little-endian header length first, then parse that many bytes as JSON.",
+			hint: "Print a JSON array with one entry per tensor. Each entry has the tensor's name, dtype, shape, and first, its first numbers.",
 			tensors: []safetensors.Tensor{{
 				Name:  "scale",
 				DType: "F32",
 				Shape: []int{4},
 				Data:  safetensors.Float32Data(1, 0.5, 0.25, 0.125),
+			}},
+		},
+		// More than four numbers, in two rows. The other cases have four or
+		// fewer, so they can't tell "the first 4" from "all of them".
+		{
+			name: "first-four",
+			hint: "first holds only the tensor's first 4 numbers, in the order the loader returns them. shape is printed as the file gives it, like [2, 3].",
+			tensors: []safetensors.Tensor{{
+				Name:  "table",
+				DType: "F32",
+				Shape: []int{2, 3},
+				Data:  safetensors.Float32Data(1, 2, 3, 4, 5, 6),
 			}},
 		},
 		{
@@ -27,7 +40,7 @@ func testReadSafetensors(harness *test_case_harness.TestCaseHarness) error {
 		},
 		{
 			name: "data-offset",
-			hint: "Read each tensor at its own data_offsets, counted from the first byte after the header.",
+			hint: "Each tensor has its own numbers. Print the values the loader returned under that tensor's name.",
 			tensors: []safetensors.Tensor{
 				{Name: "first", DType: "F32", Shape: []int{2}, Data: safetensors.Float32Data(9, 8)},
 				{Name: "second", DType: "F32", Shape: []int{2}, Data: safetensors.Float32Data(1, 2)},
@@ -35,7 +48,7 @@ func testReadSafetensors(harness *test_case_harness.TestCaseHarness) error {
 		},
 		{
 			name: "integer",
-			hint: "Decode I32 values as little-endian 32-bit integers, not as floats.",
+			hint: "An I32 tensor holds whole numbers. Print its dtype as I32 and its values as the loader returns them.",
 			tensors: []safetensors.Tensor{{
 				Name:  "ids",
 				DType: "I32",
